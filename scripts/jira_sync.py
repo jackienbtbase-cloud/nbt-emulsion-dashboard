@@ -2,9 +2,6 @@ import os
 import requests
 from requests.auth import HTTPBasicAuth
 from supabase import create_client, Client
-from dotenv import load_dotenv
-
-load_dotenv()
 
 JIRA_DOMAIN = os.getenv("JIRA_DOMAIN")
 JIRA_EMAIL = os.getenv("JIRA_EMAIL")
