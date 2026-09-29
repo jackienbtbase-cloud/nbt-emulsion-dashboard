@@ -43,10 +43,10 @@
         .delay-red { background: #ffebe6; color: #de350b; }    /* 超过7天：红色 */
         .delay-black { background: #172b4d; color: #ffffff; }  /* 超过10天：黑色 */
 
-        /* 文档链接样式 */
-        .doc-link { color: #0052cc; text-decoration: none; font-weight: 600; margin-right: 6px; }
-        .doc-link:hover { text-decoration: underline; }
-        .doc-disabled { color: #c1c7d0; margin-right: 6px; }
+        /* 文档链接样式（对齐公司主文件） */
+        .table-links a { display: inline-block; margin-right: 6px; color: #0052cc; text-decoration: none; font-weight: 600; font-size: 12px; }
+        .table-links a:hover { text-decoration: underline; }
+        .doc-disabled { color: #c1c7d0; margin-right: 6px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -144,14 +144,15 @@
         return cleaned.trim() || '-';
     }
 
-    // 生成 PO / DO / INV 链接 HTML
+    // 正确映射数据库字段名（po_link, do_link, invoice_link, bc_bl_link）
     function renderDocLinks(t) {
-        let poHtml = t.po_url ? `<a href="${t.po_url}" target="_blank" class="doc-link">PO</a>` : `<span class="doc-disabled">PO</span>`;
-        let doHtml = t.do_url ? `<a href="${t.do_url}" target="_blank" class="doc-link">DO</a>` : `<span class="doc-disabled">DO</span>`;
-        let invHtml = t.inv_url ? `<a href="${t.inv_url}" target="_blank" class="doc-link">INV</a>` : `<span class="doc-disabled">INV</span>`;
-        return `${poHtml} ${doHtml} ${invHtml}`;
+        let poHtml = t.po_link ? `<a href="${t.po_link}" target="_blank">PO</a>` : `<span class="doc-disabled">PO</span>`;
+        let doHtml = t.do_link ? `<a href="${t.do_link}" target="_blank">DO</a>` : `<span class="doc-disabled">DO</span>`;
+        let invHtml = t.invoice_link ? `<a href="${t.invoice_link}" target="_blank">INV</a>` : `<span class="doc-disabled">INV</span>`;
+        let blHtml = t.bc_bl_link ? `<a href="${t.bc_bl_link}" target="_blank">BL</a>` : ''; // 没有 BL 就为空，不显示
+        return `<div class="table-links">${poHtml} ${doHtml} ${invHtml} ${blHtml}</div>`;
     }
-
+	
     async function fetchTickets() {
         const { data, error } = await sb.from('emulsion_tickets').select('*');
         if (error) {
