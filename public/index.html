@@ -1,16 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Emulsion Dashboard</title>
+    <meta charset="UTF-8">
+    <title>Emulsion Tracking Dashboard</title>
+    <!-- 引入 Supabase 客户端 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        .ticket-card { border: 1px solid #dfe1e6; padding: 16px; margin-bottom: 12px; border-radius: 6px; font-family: sans-serif; }
-        .links a { display: inline-block; margin-right: 12px; color: #0052cc; text-decoration: none; font-size: 13px; font-weight: bold; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f5f7; margin: 0; padding: 20px; color: #172b4d; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h2 { margin-bottom: 20px; }
+        
+        /* 顶部状态统计按钮栏 */
+        .status-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .status-btn { background: #fff; border: 1px solid #dfe1e6; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .status-btn:hover { background: #ebecf0; }
+        .status-btn.active { background: #0747a6; color: white; border-color: #0747a6; }
+
+        /* 超时警告横幅 */
+        .overdue-banner { background: #ffebe6; border: 1px solid #ffbdad; color: #de350b; padding: 10px 15px; border-radius: 6px; margin-bottom: 20px; font-weight: 600; display: none; }
+
+        /* 表格样式 */
+        .table-container { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+        th, td { padding: 12px 16px; border-bottom: 1px solid #dfe1e6; }
+        th { background: #f4f5f7; color: #5e6c84; font-weight: 600; }
+        tr:hover { background: #fafbfc; }
+
+        /* 状态徽章 */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; display: inline-block; }
+        .badge-done { background: #e3fcef; color: #006644; }
+        .badge-producing { background: #fff0b3; color: #ff8b00; }
+        .badge-todo { background: #dfe1e6; color: #42526e; }
+
+        /* 逾期提示标签 */
+        .overdue-tag { background: #ffebe6; color: #de350b; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 6px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>Emulsion Board Overview</h1>
-    <div id="tickets-container"></div>
-    <script src="app.js"></script>
+
+<div class="container">
+    <h2>Emulsion Tracking Dashboard</h2>
+
+    <!-- 顶部可点击的状态筛选按钮 -->
+    <div class="status-bar" id="status-bar">
+        <!-- 动态生成按钮 -->
+    </div>
+
+    <!-- 超时警告提示 -->
+    <div id="overdue-alert" class="overdue-banner">
+        ⚠️ 警示：当前有 <span id="overdue-count">0</span> 个任务处于非完成状态且拖延超过 3 天！
+    </div>
+
+    <!-- 数据表格 -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Key & Summary</th>
+                    <th>Status</th>
+                    <th>Assignee</th>
+                    <th>Customer</th>
+                    <th>Destination</th>
+                    <th>Items & Quantities</th>
+                    <th>Latest Comment</th>
+                    <th>Updated Date / Delay</th>
+                </tr>
+            </thead>
+            <tbody id="table-body">
+                <!-- 动态填充数据 -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // 1. 初始化 Supabase 客户端
+    const supabaseUrl = 'https://yvtujoueyotncbvdlgyf.supabase.co';
+    const supabaseKey = '这里填你的_ANON_KEY'; // 请换成你真实的 anon key
+    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+    let allTickets = [];
+    let currentFilter = 'All';
+
+    // 定义支持的状态列表
+    const statuses = ['All', 'Checking', 'Producing', 'Produced', 'Delivering', 'Delivered', 'Booking', 'Booked', 'Collected'];
+
+    async function fetchTickets() {
+        const { data, error } = await supabase.from('emulsion_tickets').select('*');
+        if (error) {
+            console.error('Error fetching data:', error);
+            allTickets = [];
+        } else {
+            allTickets = data || [];
+        }
+        renderStatusBar();
+        filterAndRender(currentFilter);
+    }
+
+    // 渲染顶部状态按钮及其实时计数
+    function renderStatusBar() {
+        const statusBar = document.getElementById('status-bar');
+        statusBar.innerHTML = statuses.map(status => {
+            let count = status === 'All' ? allTickets.length : allTickets.filter(t => t.status === status).length;
+            let activeClass = currentFilter === status ? 'active' : '';
+            return `<button class="status-btn ${activeClass}" onclick="setFilter('${status}')">${status}: ${count}</button>`;
+        }).join('');
+    }
+
+    function setFilter(status) {
+        currentFilter = status;
+        renderStatusBar();
+        filterAndRender(status);
+    }
+
+    // 核心渲染与拖延计算逻辑
+    function filterAndRender(status) {
+        let filtered = allTickets;
+        if (status !== 'All') {
+            filtered = allTickets.filter(t => t.status === status);
+        }
+
+        // 按照更新时间倒序排列（最新的在最上面）
+        filtered.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+
+        const tbody = document.getElementById('table-body');
+        let overdueCount = 0;
+        const now = new Date();
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">No records found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(t => {
+            // 计算拖延天数 (基于 updated_at 或者 created_at)
+            let updateTime = new Date(t.updated_at || t.created_at || now);
+            let diffDays = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
+            
+            let isNotFinished = t.status !== 'Delivered' && t.status !== 'Collected' && t.status !== 'Done';
+            let delayHtml = '';
+            
+            if (isNotFinished && diffDays > 3) {
+                overdueCount++;
+                delayHtml = `<span class="overdue-tag">Overdue: ${diffDays} days</span>`;
+            }
+
+            // 状态徽章颜色样式
+            let badgeClass = 'badge-todo';
+            if (t.status === 'Done' || t.status === 'Delivered' || t.status === 'Collected') badgeClass = 'badge-done';
+            else if (['Producing', 'Produced', 'Checking', 'Delivering'].includes(t.status)) badgeClass = 'badge-producing';
+
+            return `
+                <tr>
+                    <td><strong>${t.ticket_key || '-'}</strong><br><small style="color:#6b778c">${t.summary || ''}</small></td>
+                    <td><span class="badge ${badgeClass}">${t.status || 'Pending'}</span></td>
+                    <td>${t.assignee || '-'}</td>
+                    <td>${t.customer || '-'}</td>
+                    <td>${t.destination || '-'}</td>
+                    <td>${t.items_quantities || '-'}</td>
+                    <td style="color: #5e6c84; font-size: 13px;">${t.latest_comment || 'No comments.'}</td>
+                    <td>
+                        ${t.updated_at ? new Date(t.updated_at).toLocaleString() : '-'}
+                        ${delayHtml}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // 更新顶部超时警告警示横幅
+        const alertBox = document.getElementById('overdue-alert');
+        const countSpan = document.getElementById('overdue-count');
+        if (overdueCount > 0 && currentFilter === 'All') {
+            alertBox.style.display = 'block';
+            countSpan.innerText = overdueCount;
+        } else {
+            alertBox.style.display = 'none';
+        }
+    }
+
+    // 页面加载时自动获取数据
+    fetchTickets();
+</script>
+
 </body>
 </html>
