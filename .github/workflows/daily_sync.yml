@@ -1,7 +1,7 @@
 name: Emulsion Jira Sync
 on:
   schedule:
-    - cron: '5 16 * * *'
+    - cron: '0 * * * *'  # 改成这样代表每小时的第 0 分钟自动运行一次
   workflow_dispatch:
 
 jobs:
