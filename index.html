@@ -8,19 +8,25 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f5f7; margin: 0; padding: 20px; color: #172b4d; }
         .container { max-width: 1400px; margin: 0 auto; }
-        h2 { margin-bottom: 20px; color: #172b4d; }
+        h2 { margin-bottom: 15px; color: #172b4d; }
+        h3 { margin-top: 30px; margin-bottom: 10px; color: #5e6c84; font-size: 16px; border-bottom: 2px solid #dfe1e6; padding-bottom: 6px; }
         
-        /* 顶部状态统计按钮栏 */
-        .status-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        /* 顶部控制栏：按钮与搜索框同行布局 */
+        .control-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
+        .status-bar { display: flex; gap: 10px; flex-wrap: wrap; }
         .status-btn { background: #fff; border: 1px solid #dfe1e6; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .status-btn:hover { background: #ebecf0; }
         .status-btn.active { background: #0747a6; color: white; border-color: #0747a6; }
+
+        /* 搜索框样式 */
+        .search-box { padding: 8px 14px; border: 1px solid #dfe1e6; border-radius: 6px; width: 260px; font-size: 14px; outline: none; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .search-box:focus { border-color: #0052cc; }
 
         /* 超时警告横幅 */
         .overdue-banner { background: #ffebe6; border: 1px solid #ffbdad; color: #de350b; padding: 12px 18px; border-radius: 6px; margin-bottom: 20px; font-weight: 600; display: none; font-size: 14px; }
 
         /* 表格样式 */
-        .table-container { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow-x: auto; }
+        .table-container { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow-x: auto; margin-bottom: 30px; }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
         th, td { padding: 12px 16px; border-bottom: 1px solid #dfe1e6; }
         th { background: #f4f5f7; color: #5e6c84; font-weight: 600; position: sticky; top: 0; z-index: 10; }
@@ -30,10 +36,12 @@
         .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block; }
         .badge-done { background: #e3fcef; color: #006644; }
         .badge-producing { background: #fff0b3; color: #ff8b00; }
-        .badge-todo { background: #dfe1e6; color: #42526e; }
 
-        /* 逾期提示标签 */
-        .overdue-tag { background: #ffebe6; color: #de350b; padding: 3px 6px; border-radius: 4px; font-size: 11px; margin-left: 8px; font-weight: bold; }
+        /* 多级超时标签样式 */
+        .delay-tag { padding: 3px 6px; border-radius: 4px; font-size: 11px; margin-left: 8px; font-weight: bold; display: inline-block; }
+        .delay-orange { background: #fff0b3; color: #ff8b00; } /* 超过5天 */
+        .delay-red { background: #ffebe6; color: #de350b; }    /* 超过7天 */
+        .delay-black { background: #172b4d; color: #ffffff; }  /* 超过10天 */
     </style>
 </head>
 <body>
@@ -41,17 +49,20 @@
 <div class="container">
     <h2>Emulsion Tracking Dashboard</h2>
 
-    <!-- 顶部可点击的状态统计按钮 -->
-    <div class="status-bar" id="status-bar">
-        <!-- 动态生成按钮 -->
+    <!-- 顶部状态按钮与搜索框 -->
+    <div class="control-bar">
+        <div class="status-bar" id="status-bar"></div>
+        <div>
+            <input type="text" id="search-input" class="search-box" placeholder="🔍 搜索编号、客户或摘要..." oninput="handleSearch()">
+        </div>
     </div>
 
     <!-- 超时警告提示 -->
     <div id="overdue-alert" class="overdue-banner">
-        ⚠️ 警示：当前有 <span id="overdue-count">0</span> 个任务处于未完成状态且超过 3 天未更新！
+        ⚠️ 警示：当前有 <span id="overdue-count">0</span> 个活跃任务超过 5 天未更新！
     </div>
 
-    <!-- 数据表格 -->
+    <!-- 主表格：活跃任务 -->
     <div class="table-container">
         <table>
             <thead>
@@ -71,21 +82,41 @@
             </tbody>
         </table>
     </div>
+
+    <!-- 独立表格：已完成任务归档 -->
+    <h3>Done / Completed Archive (<span id="done-count">0</span>)</h3>
+    <div class="table-container" style="opacity: 0.9;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Key & Summary</th>
+                    <th>Status</th>
+                    <th>Assignee</th>
+                    <th>Customer</th>
+                    <th>Destination</th>
+                    <th>Items & Quantities</th>
+                    <th>Latest Comment</th>
+                    <th>Last Updated</th>
+                </tr>
+            </thead>
+            <tbody id="done-table-body">
+                <tr><td colspan="8" style="text-align: center; color: #999; padding: 20px;">No completed records.</td></tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>
-    // 1. 初始化 Supabase 客户端
     const supabaseUrl = 'https://yvtujoueyotncbvdlgyf.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2dHVqb3VleW90bmNidmRsZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNDAxOTQsImV4cCI6MjEwMzgxNjE5NH0.mmo23blJAMclVJ2MgMoGDNQiDuKw1_O3bWC3Mp2hdVU'; 
-    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    const sb = window.supabase.createClient(supabaseUrl, supabaseKey);
 
     let allTickets = [];
-    let currentFilter = 'All';
+    let currentFilter = 'All Active';
 
-    // 状态列表定义
-    const statuses = ['All', 'Checking', 'Producing', 'Produced', 'Delivering', 'Delivered', 'Booking', 'Booked', 'Collected'];
+    const doneStatuses = ['Done', 'Delivered', 'Collected'];
+    const activeStatuses = ['All Active', 'Checking', 'Producing', 'Produced', 'Delivering', 'Booking', 'Booked'];
 
-    // 辅助解析函数
     function extractJsonValue(rawStr) {
         if (!rawStr) return '-';
         try {
@@ -107,7 +138,7 @@
     }
 
     async function fetchTickets() {
-        const { data, error } = await supabase.from('emulsion_tickets').select('*');
+        const { data, error } = await sb.from('emulsion_tickets').select('*');
         if (error) {
             console.error('获取数据报错:', error);
             allTickets = [];
@@ -116,13 +147,15 @@
         }
         renderStatusBar();
         filterAndRender(currentFilter);
+        renderDoneTable();
     }
 
-    // 渲染顶部可点击的统计按钮
     function renderStatusBar() {
+        const activeTickets = allTickets.filter(t => !doneStatuses.includes(t.status));
         const statusBar = document.getElementById('status-bar');
-        statusBar.innerHTML = statuses.map(status => {
-            let count = status === 'All' ? allTickets.length : allTickets.filter(t => t.status === status).length;
+        
+        statusBar.innerHTML = activeStatuses.map(status => {
+            let count = status === 'All Active' ? activeTickets.length : activeTickets.filter(t => t.status === status).length;
             let activeClass = currentFilter === status ? 'active' : '';
             return `<button class="status-btn ${activeClass}" onclick="setFilter('${status}')">${status}: ${count}</button>`;
         }).join('');
@@ -134,14 +167,26 @@
         filterAndRender(status);
     }
 
-    // 核心过滤与逾期计算渲染逻辑
+    function handleSearch() {
+        filterAndRender(currentFilter);
+    }
+
     function filterAndRender(status) {
-        let filtered = allTickets;
-        if (status !== 'All') {
-            filtered = allTickets.filter(t => t.status === status);
+        const keyword = document.getElementById('search-input').value.toLowerCase().trim();
+        let activeTickets = allTickets.filter(t => !doneStatuses.includes(t.status));
+        let filtered = status === 'All Active' ? activeTickets : activeTickets.filter(t => t.status === status);
+
+        // 关键词搜索过滤
+        if (keyword) {
+            filtered = filtered.filter(t => {
+                const keyStr = (t.ticket_key || t.issue_key || '').toLowerCase();
+                const summaryStr = (t.summary || '').toLowerCase();
+                const customerStr = extractJsonValue(t.customer).toLowerCase();
+                const assigneeStr = (t.assignee || '').toLowerCase();
+                return keyStr.includes(keyword) || summaryStr.includes(keyword) || customerStr.includes(keyword) || assigneeStr.includes(keyword);
+            });
         }
 
-        // 按照更新时间倒序排列（最新的在最上面）
         filtered.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
 
         const tbody = document.getElementById('table-body');
@@ -149,7 +194,8 @@
         const now = new Date();
 
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">No records found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">No matching active records found.</td></tr>`;
+            document.getElementById('overdue-alert').style.display = 'none';
             return;
         }
 
@@ -163,27 +209,25 @@
             if (t.item_2 && t.qty_2) itemsStr.push(`${t.item_2}: ${t.qty_2}`);
             if (t.item_3 && t.qty_3) itemsStr.push(`${t.item_3}: ${t.qty_3}`);
 
-            // 计算拖延天数
             let updateTime = new Date(t.updated_at || now);
             let diffDays = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
             
-            let isNotFinished = !['Delivered', 'Collected', 'Done'].includes(t.status);
             let delayHtml = '';
-            
-            if (isNotFinished && diffDays > 3) {
+            if (diffDays >= 10) {
                 overdueCount++;
-                delayHtml = `<span class="overdue-tag">Overdue: ${diffDays}d</span>`;
+                delayHtml = `<span class="delay-tag delay-black">Overdue: ${diffDays}d</span>`;
+            } else if (diffDays >= 7) {
+                overdueCount++;
+                delayHtml = `<span class="delay-tag delay-red">Overdue: ${diffDays}d</span>`;
+            } else if (diffDays >= 5) {
+                overdueCount++;
+                delayHtml = `<span class="delay-tag delay-orange">Overdue: ${diffDays}d</span>`;
             }
-
-            // 状态徽章样式
-            let badgeClass = 'badge-todo';
-            if (['Done', 'Delivered', 'Collected'].includes(t.status)) badgeClass = 'badge-done';
-            else if (['Producing', 'Produced', 'Checking', 'Delivering'].includes(t.status)) badgeClass = 'badge-producing';
 
             return `
                 <tr>
                     <td><strong>${t.ticket_key || t.issue_key || '-'}</strong><br><small style="color:#5e6c84">${t.summary || ''}</small></td>
-                    <td><span class="badge ${badgeClass}">${t.status || 'Pending'}</span></td>
+                    <td><span class="badge badge-producing">${t.status || 'Pending'}</span></td>
                     <td>${t.assignee || 'Unassigned'}</td>
                     <td>${cleanCus}</td>
                     <td>${cleanDest}</td>
@@ -197,10 +241,9 @@
             `;
         }).join('');
 
-        // 顶部警示横幅逻辑
         const alertBox = document.getElementById('overdue-alert');
         const countSpan = document.getElementById('overdue-count');
-        if (overdueCount > 0 && currentFilter === 'All') {
+        if (overdueCount > 0 && currentFilter === 'All Active' && !keyword) {
             alertBox.style.display = 'block';
             countSpan.innerText = overdueCount;
         } else {
@@ -208,7 +251,43 @@
         }
     }
 
-    // 页面加载时自动获取数据
+    function renderDoneTable() {
+        const doneTickets = allTickets.filter(t => doneStatuses.includes(t.status));
+        doneTickets.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+        
+        document.getElementById('done-count').innerText = doneTickets.length;
+        const doneTbody = document.getElementById('done-table-body');
+
+        if (doneTickets.length === 0) {
+            doneTbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #999; padding: 20px;">No completed records.</td></tr>`;
+            return;
+        }
+
+        doneTbody.innerHTML = doneTickets.map(t => {
+            const cleanCus = extractJsonValue(t.customer);
+            const cleanDest = extractJsonValue(t.destination);
+            const cleanMsg = cleanComment(t.latest_comment);
+            
+            let itemsStr = [];
+            if (t.item_1 && t.qty_1) itemsStr.push(`${t.item_1}: ${t.qty_1}`);
+            if (t.item_2 && t.qty_2) itemsStr.push(`${t.item_2}: ${t.qty_2}`);
+            if (t.item_3 && t.qty_3) itemsStr.push(`${t.item_3}: ${t.qty_3}`);
+
+            return `
+                <tr>
+                    <td><strong>${t.ticket_key || t.issue_key || '-'}</strong><br><small style="color:#5e6c84">${t.summary || ''}</small></td>
+                    <td><span class="badge badge-done">${t.status}</span></td>
+                    <td>${t.assignee || 'Unassigned'}</td>
+                    <td>${cleanCus}</td>
+                    <td>${cleanDest}</td>
+                    <td>${itemsStr.join('<br>') || '-'}</td>
+                    <td style="color: #5e6c84; max-width: 250px; white-space: normal;">${cleanMsg}</td>
+                    <td>${t.updated_at ? new Date(t.updated_at).toLocaleString() : '-'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
     fetchTickets();
 </script>
 
