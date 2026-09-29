@@ -11,15 +11,15 @@
         h2 { margin-bottom: 15px; color: #172b4d; }
         h3 { margin-top: 30px; margin-bottom: 10px; color: #5e6c84; font-size: 16px; border-bottom: 2px solid #dfe1e6; padding-bottom: 6px; }
         
-        /* 顶部控制栏：按钮与搜索框同行布局 */
+        /* 顶部控制栏：按钮与搜索框 */
         .control-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
         .status-bar { display: flex; gap: 10px; flex-wrap: wrap; }
         .status-btn { background: #fff; border: 1px solid #dfe1e6; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .status-btn:hover { background: #ebecf0; }
         .status-btn.active { background: #0747a6; color: white; border-color: #0747a6; }
 
-        /* 搜索框样式 */
-        .search-box { padding: 8px 14px; border: 1px solid #dfe1e6; border-radius: 6px; width: 260px; font-size: 14px; outline: none; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        /* 编号搜索框 */
+        .search-box { padding: 8px 14px; border: 1px solid #dfe1e6; border-radius: 6px; width: 240px; font-size: 14px; outline: none; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .search-box:focus { border-color: #0052cc; }
 
         /* 超时警告横幅 */
@@ -39,9 +39,14 @@
 
         /* 多级超时标签样式 */
         .delay-tag { padding: 3px 6px; border-radius: 4px; font-size: 11px; margin-left: 8px; font-weight: bold; display: inline-block; }
-        .delay-orange { background: #fff0b3; color: #ff8b00; } /* 超过5天 */
-        .delay-red { background: #ffebe6; color: #de350b; }    /* 超过7天 */
-        .delay-black { background: #172b4d; color: #ffffff; }  /* 超过10天 */
+        .delay-orange { background: #fff0b3; color: #ff8b00; } /* 超过5天：橙色 */
+        .delay-red { background: #ffebe6; color: #de350b; }    /* 超过7天：红色 */
+        .delay-black { background: #172b4d; color: #ffffff; }  /* 超过10天：黑色 */
+
+        /* 文档链接样式 */
+        .doc-link { color: #0052cc; text-decoration: none; font-weight: 600; margin-right: 6px; }
+        .doc-link:hover { text-decoration: underline; }
+        .doc-disabled { color: #c1c7d0; margin-right: 6px; }
     </style>
 </head>
 <body>
@@ -49,11 +54,11 @@
 <div class="container">
     <h2>Emulsion Tracking Dashboard</h2>
 
-    <!-- 顶部状态按钮与搜索框 -->
+    <!-- 顶部控制栏：状态统计按钮 + 编号搜索框 -->
     <div class="control-bar">
         <div class="status-bar" id="status-bar"></div>
         <div>
-            <input type="text" id="search-input" class="search-box" placeholder="🔍 搜索编号、客户或摘要..." oninput="handleSearch()">
+            <input type="text" id="ticket-search" class="search-box" placeholder="🔍 搜编号（如 NE-310）..." oninput="handleSearch()">
         </div>
     </div>
 
@@ -73,12 +78,13 @@
                     <th>Customer</th>
                     <th>Destination</th>
                     <th>Items & Quantities</th>
+                    <th>Documents / Links</th>
                     <th>Latest Comment</th>
                     <th>Last Updated / Delay</th>
                 </tr>
             </thead>
             <tbody id="table-body">
-                <tr><td colspan="8" style="text-align: center; color: #6b778c; padding: 30px;">Loading data from Supabase...</td></tr>
+                <tr><td colspan="9" style="text-align: center; color: #6b778c; padding: 30px;">Loading data from Supabase...</td></tr>
             </tbody>
         </table>
     </div>
@@ -95,12 +101,13 @@
                     <th>Customer</th>
                     <th>Destination</th>
                     <th>Items & Quantities</th>
+                    <th>Documents / Links</th>
                     <th>Latest Comment</th>
                     <th>Last Updated</th>
                 </tr>
             </thead>
             <tbody id="done-table-body">
-                <tr><td colspan="8" style="text-align: center; color: #999; padding: 20px;">No completed records.</td></tr>
+                <tr><td colspan="9" style="text-align: center; color: #999; padding: 20px;">No completed records.</td></tr>
             </tbody>
         </table>
     </div>
@@ -135,6 +142,14 @@
         let cleaned = comment.replace(/\[~accountid:[^\]]+\]\s*/g, '');
         cleaned = cleaned.replace(/<\/?i>/g, '');
         return cleaned.trim() || '-';
+    }
+
+    // 生成 PO / DO / INV 链接 HTML
+    function renderDocLinks(t) {
+        let poHtml = t.po_url ? `<a href="${t.po_url}" target="_blank" class="doc-link">PO</a>` : `<span class="doc-disabled">PO</span>`;
+        let doHtml = t.do_url ? `<a href="${t.do_url}" target="_blank" class="doc-link">DO</a>` : `<span class="doc-disabled">DO</span>`;
+        let invHtml = t.inv_url ? `<a href="${t.inv_url}" target="_blank" class="doc-link">INV</a>` : `<span class="doc-disabled">INV</span>`;
+        return `${poHtml} ${doHtml} ${invHtml}`;
     }
 
     async function fetchTickets() {
@@ -172,18 +187,14 @@
     }
 
     function filterAndRender(status) {
-        const keyword = document.getElementById('search-input').value.toLowerCase().trim();
         let activeTickets = allTickets.filter(t => !doneStatuses.includes(t.status));
         let filtered = status === 'All Active' ? activeTickets : activeTickets.filter(t => t.status === status);
 
-        // 关键词搜索过滤
-        if (keyword) {
+        const searchId = document.getElementById('ticket-search').value.toLowerCase().trim();
+        if (searchId) {
             filtered = filtered.filter(t => {
                 const keyStr = (t.ticket_key || t.issue_key || '').toLowerCase();
-                const summaryStr = (t.summary || '').toLowerCase();
-                const customerStr = extractJsonValue(t.customer).toLowerCase();
-                const assigneeStr = (t.assignee || '').toLowerCase();
-                return keyStr.includes(keyword) || summaryStr.includes(keyword) || customerStr.includes(keyword) || assigneeStr.includes(keyword);
+                return keyStr.includes(searchId);
             });
         }
 
@@ -194,7 +205,7 @@
         const now = new Date();
 
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #999; padding: 30px;">No matching active records found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #999; padding: 30px;">No matching active records found.</td></tr>`;
             document.getElementById('overdue-alert').style.display = 'none';
             return;
         }
@@ -232,6 +243,7 @@
                     <td>${cleanCus}</td>
                     <td>${cleanDest}</td>
                     <td>${itemsStr.join('<br>') || '-'}</td>
+                    <td>${renderDocLinks(t)}</td>
                     <td style="color: #5e6c84; max-width: 250px; white-space: normal;">${cleanMsg}</td>
                     <td>
                         ${t.updated_at ? new Date(t.updated_at).toLocaleString() : '-'}
@@ -243,7 +255,7 @@
 
         const alertBox = document.getElementById('overdue-alert');
         const countSpan = document.getElementById('overdue-count');
-        if (overdueCount > 0 && currentFilter === 'All Active' && !keyword) {
+        if (overdueCount > 0 && currentFilter === 'All Active' && !searchId) {
             alertBox.style.display = 'block';
             countSpan.innerText = overdueCount;
         } else {
@@ -259,7 +271,7 @@
         const doneTbody = document.getElementById('done-table-body');
 
         if (doneTickets.length === 0) {
-            doneTbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #999; padding: 20px;">No completed records.</td></tr>`;
+            doneTbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #999; padding: 20px;">No completed records.</td></tr>`;
             return;
         }
 
@@ -281,6 +293,7 @@
                     <td>${cleanCus}</td>
                     <td>${cleanDest}</td>
                     <td>${itemsStr.join('<br>') || '-'}</td>
+                    <td>${renderDocLinks(t)}</td>
                     <td style="color: #5e6c84; max-width: 250px; white-space: normal;">${cleanMsg}</td>
                     <td>${t.updated_at ? new Date(t.updated_at).toLocaleString() : '-'}</td>
                 </tr>
