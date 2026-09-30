@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Emulsion Tracking Dashboard</title>
-	<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
     <!-- 引入 Supabase 客户端 -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -18,6 +18,7 @@
         .status-btn { background: #fff; border: 1px solid #dfe1e6; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .status-btn:hover { background: #ebecf0; }
         .status-btn.active { background: #0747a6; color: white; border-color: #0747a6; }
+        .status-btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
         /* 编号搜索框 */
         .search-box { padding: 8px 14px; border: 1px solid #dfe1e6; border-radius: 6px; width: 240px; font-size: 14px; outline: none; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -55,10 +56,14 @@
 <div class="container">
     <h2>Emulsion Tracking Dashboard</h2>
 
-    <!-- 顶部控制栏：状态统计按钮 + 编号搜索框 -->
+    <!-- 顶部控制栏：状态统计按钮 + 刷新 + 编号搜索框 -->
     <div class="control-bar">
         <div class="status-bar" id="status-bar"></div>
-        <div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="last-refresh-time" style="font-size: 12px; color: #5e6c84; font-weight: 500;"></span>
+            <button id="refresh-btn" class="status-btn" onclick="handleRefresh()" style="background-color: #e3fcef; color: #006644; border-color: #006644; min-width: 100px;">
+                🔄 Refresh
+            </button>
             <input type="text" id="ticket-search" class="search-box" placeholder="🔍 搜编号（如 NE-310）..." oninput="handleSearch()">
         </div>
     </div>
@@ -145,15 +150,26 @@
         return cleaned.trim() || '-';
     }
 
-    // 正确映射数据库字段名（po_link, do_link, invoice_link, bc_bl_link）
     function renderDocLinks(t) {
         let poHtml = t.po_link ? `<a href="${t.po_link}" target="_blank">PO</a>` : `<span class="doc-disabled">PO</span>`;
         let doHtml = t.do_link ? `<a href="${t.do_link}" target="_blank">DO</a>` : `<span class="doc-disabled">DO</span>`;
         let invHtml = t.invoice_link ? `<a href="${t.invoice_link}" target="_blank">INV</a>` : `<span class="doc-disabled">INV</span>`;
-        let blHtml = t.bc_bl_link ? `<a href="${t.bc_bl_link}" target="_blank">BL</a>` : ''; // 没有 BL 就为空，不显示
+        let blHtml = t.bc_bl_link ? `<a href="${t.bc_bl_link}" target="_blank">BL</a>` : ''; 
         return `<div class="table-links">${poHtml} ${doHtml} ${invHtml} ${blHtml}</div>`;
     }
-	
+    
+    // 点击刷新按钮的触发函数
+    async function handleRefresh() {
+        const btn = document.getElementById('refresh-btn');
+        btn.innerHTML = '⏳ Loading...';
+        btn.disabled = true; // 防止连续狂点
+        
+        await fetchTickets();
+        
+        btn.innerHTML = '🔄 Refresh';
+        btn.disabled = false;
+    }
+
     async function fetchTickets() {
         const { data, error } = await sb.from('emulsion_tickets').select('*');
         if (error) {
@@ -165,6 +181,10 @@
         renderStatusBar();
         filterAndRender(currentFilter);
         renderDoneTable();
+        
+        // 数据拉取完毕后，更新时间戳
+        const now = new Date();
+        document.getElementById('last-refresh-time').innerText = 'Last updated: ' + now.toLocaleTimeString();
     }
 
     function renderStatusBar() {
