@@ -323,8 +323,28 @@
         }).join('');
     }
 
-    fetchTickets();
-</script>
+   fetchTickets(); 
+    
+    function scheduleNextRefresh() {
+        const now = new Date();
+        
+        let targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 5, 0, 0);
+        
+        if (now.getTime() >= targetTime.getTime()) {
+            targetTime.setHours(targetTime.getHours() + 1);
+        }
 
+        const timeUntilNextRefresh = targetTime.getTime() - now.getTime();
+
+        setTimeout(() => {
+            handleRefresh();
+            
+           scheduleNextRefresh(); 
+        }, timeUntilNextRefresh);
+    }
+
+    scheduleNextRefresh();
+
+</script>
 </body>
 </html>
