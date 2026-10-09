@@ -45,10 +45,14 @@
         .delay-red { background: #ffebe6; color: #de350b; }    /* 超过7天：红色 */
         .delay-black { background: #172b4d; color: #ffffff; }  /* 超过10天：黑色 */
 
-        /* 文档链接样式（对齐公司主文件） */
+        /* 文档链接样式 */
         .table-links a { display: inline-block; margin-right: 6px; color: #0052cc; text-decoration: none; font-weight: 600; font-size: 12px; }
         .table-links a:hover { text-decoration: underline; }
         .doc-disabled { color: #c1c7d0; margin-right: 6px; font-size: 12px; }
+
+        /* 隐藏小按钮样式 */
+        .hide-btn { background: none; border: 1px solid transparent; cursor: pointer; color: #999; font-size: 12px; padding: 2px 6px; border-radius: 4px; transition: all 0.2s; }
+        .hide-btn:hover { background: #ffebe6; color: #de350b; border-color: #ffbdad; }
     </style>
 </head>
 <body>
@@ -56,11 +60,14 @@
 <div class="container">
     <h2>Emulsion Tracking Dashboard</h2>
 
-    <!-- 顶部控制栏：状态统计按钮 + 刷新 + 编号搜索框 -->
+    <!-- 顶部控制栏：状态统计按钮 + 隐藏管理 + 刷新 + 编号搜索框 -->
     <div class="control-bar">
         <div class="status-bar" id="status-bar"></div>
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
             <span id="last-refresh-time" style="font-size: 12px; color: #5e6c84; font-weight: 500;"></span>
+            <button class="status-btn" onclick="openManageHiddenModal()" style="background-color: #fff; color: #de350b; border-color: #ffbdad;">
+                🚫 隐藏管理 (<span id="hidden-count">0</span>)
+            </button>
             <button id="refresh-btn" class="status-btn" onclick="handleRefresh()" style="background-color: #e3fcef; color: #006644; border-color: #006644; min-width: 100px;">
                 🔄 Refresh
             </button>
@@ -127,6 +134,9 @@
     let allTickets = [];
     let currentFilter = 'All Active';
 
+    // 从浏览器本地存储读取隐藏单号列表（初始可包含 'NE-313' 或为空）
+    let hiddenTickets = JSON.parse(localStorage.getItem('nbt_hidden_tickets') || '[]');
+
     const doneStatuses = ['Done', 'Delivered', 'Collected'];
     const activeStatuses = ['All Active', 'Checking', 'Producing', 'Produced', 'Delivering', 'Booking', 'Booked'];
 
@@ -157,6 +167,46 @@
         let blHtml = t.bc_bl_link ? `<a href="${t.bc_bl_link}" target="_blank">BL</a>` : ''; 
         return `<div class="table-links">${poHtml} ${doHtml} ${invHtml} ${blHtml}</div>`;
     }
+
+    // 隐藏指定单号
+    function hideTicket(event, key) {
+        event.stopPropagation();
+        if (!key) return;
+        if (confirm(`确定要在本地视图中隐藏 ${key} 吗？\n（这只会隐藏你电脑上的显示，绝对不会修改 Supabase 数据库）`)) {
+            if (!hiddenTickets.includes(key)) {
+                hiddenTickets.push(key);
+                localStorage.setItem('nbt_hidden_tickets', JSON.stringify(hiddenTickets));
+                updateHiddenCount();
+                renderStatusBar();
+                filterAndRender(currentFilter);
+                renderDoneTable();
+            }
+        }
+    }
+
+    // 管理/查看被隐藏的单号
+    function openManageHiddenModal() {
+        if (hiddenTickets.length === 0) {
+            alert("当前没有被本地隐藏的单号。");
+            return;
+        }
+        let listStr = hiddenTickets.join(', ');
+        let action = confirm(`当前被本地隐藏的单号有：\n[ ${listStr} ]\n\n点击“确定”将清空隐藏列表并恢复显示所有单号；点击“取消”保持现状。`);
+        if (action) {
+            localStorage.removeItem('nbt_hidden_tickets');
+            hiddenTickets = [];
+            updateHiddenCount();
+            renderStatusBar();
+            filterAndRender(currentFilter);
+            renderDoneTable();
+            alert("已恢复显示所有单号！");
+        }
+    }
+
+    function updateHiddenCount() {
+        const el = document.getElementById('hidden-count');
+        if (el) el.innerText = hiddenTickets.length;
+    }
     
     // 点击刷新按钮的触发函数
     async function handleRefresh() {
@@ -178,6 +228,7 @@
         } else {
             allTickets = data || [];
         }
+        updateHiddenCount();
         renderStatusBar();
         filterAndRender(currentFilter);
         renderDoneTable();
@@ -188,7 +239,11 @@
     }
 
     function renderStatusBar() {
-        const activeTickets = allTickets.filter(t => !doneStatuses.includes(t.status));
+        // 统计时排除掉被本地隐藏的单号
+        const activeTickets = allTickets.filter(t => {
+            const key = t.ticket_key || t.issue_key || '';
+            return !doneStatuses.includes(t.status) && !hiddenTickets.includes(key);
+        });
         const statusBar = document.getElementById('status-bar');
         
         statusBar.innerHTML = activeStatuses.map(status => {
@@ -209,7 +264,11 @@
     }
 
     function filterAndRender(status) {
-        let activeTickets = allTickets.filter(t => !doneStatuses.includes(t.status));
+        // 过滤掉已完成以及本地隐藏的单号
+        let activeTickets = allTickets.filter(t => {
+            const key = t.ticket_key || t.issue_key || '';
+            return !doneStatuses.includes(t.status) && !hiddenTickets.includes(key);
+        });
         let filtered = status === 'All Active' ? activeTickets : activeTickets.filter(t => t.status === status);
 
         const searchId = document.getElementById('ticket-search').value.toLowerCase().trim();
@@ -236,6 +295,7 @@
             const cleanCus = extractJsonValue(t.customer);
             const cleanDest = extractJsonValue(t.destination);
             const cleanMsg = cleanComment(t.latest_comment);
+            const ticketKey = t.ticket_key || t.issue_key || '-';
             
             let itemsStr = [];
             if (t.item_1 && t.qty_1) itemsStr.push(`${t.item_1}: ${t.qty_1}`);
@@ -259,7 +319,12 @@
 
             return `
                 <tr>
-                    <td><strong>${t.ticket_key || t.issue_key || '-'}</strong><br><small style="color:#5e6c84">${t.summary || ''}</small></td>
+                    <td>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                            <div><strong>${ticketKey}</strong><br><small style="color:#5e6c84">${t.summary || ''}</small></div>
+                            <button class="hide-btn" onclick="hideTicket(event, '${ticketKey}')" title="在本地隐藏此单号">❌ 隐藏</button>
+                        </div>
+                    </td>
                     <td><span class="badge badge-producing">${t.status || 'Pending'}</span></td>
                     <td>${t.assignee || 'Unassigned'}</td>
                     <td>${cleanCus}</td>
@@ -286,7 +351,11 @@
     }
 
     function renderDoneTable() {
-        const doneTickets = allTickets.filter(t => doneStatuses.includes(t.status));
+        // 过滤掉本地隐藏的单号
+        const doneTickets = allTickets.filter(t => {
+            const key = t.ticket_key || t.issue_key || '';
+            return doneStatuses.includes(t.status) && !hiddenTickets.includes(key);
+        });
         doneTickets.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
         
         document.getElementById('done-count').innerText = doneTickets.length;
@@ -301,6 +370,7 @@
             const cleanCus = extractJsonValue(t.customer);
             const cleanDest = extractJsonValue(t.destination);
             const cleanMsg = cleanComment(t.latest_comment);
+            const ticketKey = t.ticket_key || t.issue_key || '-';
             
             let itemsStr = [];
             if (t.item_1 && t.qty_1) itemsStr.push(`${t.item_1}: ${t.qty_1}`);
@@ -309,7 +379,12 @@
 
             return `
                 <tr>
-                    <td><strong>${t.ticket_key || t.issue_key || '-'}</strong><br><small style="color:#5e6c84">${t.summary || ''}</small></td>
+                    <td>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                            <div><strong>${ticketKey}</strong><br><small style="color:#5e6c84">${t.summary || ''}</small></div>
+                            <button class="hide-btn" onclick="hideTicket(event, '${ticketKey}')" title="在本地隐藏此单号">❌ 隐藏</button>
+                        </div>
+                    </td>
                     <td><span class="badge badge-done">${t.status}</span></td>
                     <td>${t.assignee || 'Unassigned'}</td>
                     <td>${cleanCus}</td>
@@ -323,28 +398,23 @@
         }).join('');
     }
 
-   fetchTickets(); 
+    fetchTickets(); 
     
     function scheduleNextRefresh() {
         const now = new Date();
-        
         let targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 5, 0, 0);
-        
         if (now.getTime() >= targetTime.getTime()) {
             targetTime.setHours(targetTime.getHours() + 1);
         }
-
         const timeUntilNextRefresh = targetTime.getTime() - now.getTime();
 
         setTimeout(() => {
             handleRefresh();
-            
-           scheduleNextRefresh(); 
+            scheduleNextRefresh(); 
         }, timeUntilNextRefresh);
     }
 
     scheduleNextRefresh();
-
 </script>
 </body>
 </html>
