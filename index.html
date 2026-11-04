@@ -149,6 +149,25 @@
         .archive .key { font-size: 13px; color: var(--text); }
         .archive .st { font-size: 12px; }
 
+        /* ===== 本机隐藏（只存在这台电脑的浏览器里） ===== */
+        td.k { position: relative; }
+        .hide-btn { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--faint); cursor: pointer; opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+        tr:hover .hide-btn, .hide-btn:focus-visible { opacity: 1; }
+        .hide-btn:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 25%, transparent); }
+        .hide-btn.unhide:hover { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
+        .archive td.key { position: relative; padding-right: 40px; }
+        .archive .hide-btn { top: 50%; transform: translateY(-50%); }
+        tr.is-hidden td { opacity: .45; }
+        tr.is-hidden .hide-btn { opacity: 1; }
+        .btn.hidden-toggle { display: none; }
+        .btn.hidden-toggle.show { display: inline-flex; }
+        .btn.hidden-toggle.on { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+        .hidebar { display: none; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; padding: 10px 16px; border-radius: 12px; font-size: 13px; color: var(--muted); background: var(--brand-soft); border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent); }
+        .hidebar.show { display: flex; }
+        .hidebar button { font: inherit; font-weight: 600; font-size: 12.5px; color: var(--brand); background: none; border: 0; padding: 0; cursor: pointer; }
+        .hidebar button:hover { text-decoration: underline; }
+        @media (hover: none) { .hide-btn { opacity: .55; } }
+
         @media (max-width: 760px) {
             body { padding: 18px 12px 48px; }
             .topbar h1 { font-size: 22px; } .search { width: 100%; } .searchbox { flex: 1 1 100%; }
@@ -170,6 +189,10 @@
                 <svg id="refresh-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
                 <span id="refresh-txt">Refresh</span>
             </button>
+            <button class="btn hidden-toggle" id="hidden-toggle" type="button" title="Tickets hidden on this computer only">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="m1 1 22 22"/></svg>
+                <span id="hidden-toggle-txt">Hidden</span>
+            </button>
             <label class="searchbox">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
                 <input class="search" id="search" type="text" placeholder="搜编号（如 NE-310）/ 客户 / PO" oninput="render()">
@@ -178,6 +201,12 @@
     </div>
 
     <div class="loaderr" id="loaderr"></div>
+
+    <div class="hidebar" id="hidebar">
+        <span>👁 Showing hidden tickets (dimmed). They are hidden on this computer only.</span>
+        <button type="button" id="unhide-all">Unhide all</button>
+        <button type="button" id="hidebar-close">Back to normal view</button>
+    </div>
 
     <div class="tabs" id="pipeline"></div>
 
@@ -213,6 +242,14 @@
 
     /* ================================= */
 
+    /* ===== 本机隐藏：只存在这台电脑的浏览器 localStorage，不改 Supabase / Jira ===== */
+    const HIDE_STORE = 'nbt_emulsion_hidden_v1';
+    const hiddenKeys = (() => {
+        try { return new Set(JSON.parse(localStorage.getItem(HIDE_STORE) || '[]')); } catch (e) { return new Set(); }
+    })();
+    function saveHidden() { try { localStorage.setItem(HIDE_STORE, JSON.stringify([...hiddenKeys])); } catch (e) { console.warn('localStorage unavailable', e); } }
+    let showHidden = false;
+
     let allTickets = [];
     let currentFilter = 'All Active';
     let loaded = false, loadError = '';
@@ -222,7 +259,23 @@
     const safeUrl = u => /^https?:\/\//i.test(String(u || '').trim()) ? esc(String(u).trim()) : '';
     const keyOf = t => t.ticket_key || t.issue_key || '';
     const isDone = t => DONE_STATUSES.includes(t.status);
-    const activeList = () => allTickets.filter(t => !isDone(t));
+    const isHidden = t => hiddenKeys.has(keyOf(t));
+    const tickets = () => showHidden ? allTickets : allTickets.filter(t => !isHidden(t));   // 隐藏的默认不参与任何统计 / 列表
+    const activeList = () => tickets().filter(t => !isDone(t));
+    const hideBtn = t => {
+        const k = esc(keyOf(t));
+        return isHidden(t)
+            ? `<button class="hide-btn unhide" data-unhide="${k}" title="Unhide ${k}" aria-label="Unhide ${k}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>`
+            : `<button class="hide-btn" data-hide="${k}" title="Hide ${k} (this computer only)" aria-label="Hide ${k}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="m1 1 22 22"/></svg></button>`;
+    };
+    function updateHideUi() {
+        const n = allTickets.filter(isHidden).length;          // 只算数据里还存在的
+        const b = document.getElementById('hidden-toggle');
+        b.classList.toggle('show', n > 0 || showHidden);
+        b.classList.toggle('on', showHidden);
+        document.getElementById('hidden-toggle-txt').textContent = showHidden ? 'Hiding off' : `Hidden (${n})`;
+        document.getElementById('hidebar').classList.toggle('show', showHidden);
+    }
 
     function jsonVal(raw) {
         if (!raw) return '-';
@@ -263,7 +316,7 @@
     }
     function siblingsOf(t) {
         const po = poOf(t);
-        return po ? allTickets.filter(o => keyOf(o) !== keyOf(t) && poOf(o) === po) : [];
+        return po ? tickets().filter(o => keyOf(o) !== keyOf(t) && poOf(o) === po) : [];
     }
     function itemsOf(t) {
         const out = [];
@@ -295,7 +348,7 @@
             tab('All Active', 'All Active', active, 'all') +
             order.map(s => tab(s, s, active.filter(t => t.status === s), '')).join('') +
             '<span class="t-sep"></span>' +
-            DONE_STATUSES.map(s => tab(s, s, allTickets.filter(t => t.status === s), 'end')).join('');
+            DONE_STATUSES.map(s => tab(s, s, tickets().filter(t => t.status === s), 'end')).join('');
     }
 
     function docsHtml(t, flagMissing) {
@@ -321,8 +374,8 @@
             ? `<span class="age lv${lv}">${d} 天没更新</span><div class="age-sub">时限 ${limitOf(t)} 天 · ${shortDate(t.updated_at)}</div>`
             : `<div class="fresh ${d > 1 ? 'old' : ''}">${d === 0 ? '今天刚更新' : d + ' 天前'}</div><div class="age-sub">${shortDate(t.updated_at)}</div>`;
 
-        return `<tr id="row-${esc(key)}" class="${lv ? 'lv' + lv : ''}">
-            <td class="k"><div class="key">${esc(key)}</div><div class="sum">${esc(t.summary || '')}</div>${sib}</td>
+        return `<tr id="row-${esc(key)}" class="${lv ? 'lv' + lv : ''} ${isHidden(t) ? 'is-hidden' : ''}">
+            <td class="k">${hideBtn(t)}<div class="key">${esc(key)}</div><div class="sum">${esc(t.summary || '')}</div>${sib}</td>
             <td>${stHtml(t.status)}</td>
             <td>${avatar(t.assignee)}</td>
             <td class="cust">${esc(jsonVal(t.customer))}</td>
@@ -351,6 +404,7 @@
 
     function render() {
         const now = new Date();
+        updateHideUi();
         renderTabs(now);
 
         if (DONE_STATUSES.includes(currentFilter)) {       // 点了 Done / Cancelled：只看那一类
@@ -389,7 +443,7 @@
         const wasOpen = !!(old && old.open) && !prevEndMode;   // 从“只看已结束”切回来时折叠回去
         prevEndMode = endMode;
 
-        let done = allTickets.filter(isDone);
+        let done = tickets().filter(isDone);
         if (!done.length) { wrap.innerHTML = ''; return; }
         const counts = {};
         done.forEach(t => { counts[t.status] = (counts[t.status] || 0) + 1; });
@@ -403,8 +457,8 @@
         done.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
 
         const chips = DONE_STATUSES.filter(s => counts[s]).map(s => `<span>${esc(s)}<b>${counts[s]}</b></span>`).join('');
-        const rows = done.map(t => `<tr>
-            <td class="key">${esc(keyOf(t))}</td><td class="s">${esc(t.summary || '')}</td><td>${stHtml(t.status)}</td>
+        const rows = done.map(t => `<tr class="${isHidden(t) ? 'is-hidden' : ''}">
+            <td class="key">${esc(keyOf(t))}${hideBtn(t)}</td><td class="s">${esc(t.summary || '')}</td><td>${stHtml(t.status)}</td>
             <td>${esc(jsonVal(t.customer))}</td><td>${esc(jsonVal(t.destination))}</td><td>${shortDate(t.updated_at)}</td><td>${docsHtml(t, false)}</td></tr>`).join('')
             || `<tr><td class="empty" colspan="7">No matching records found.</td></tr>`;
         wrap.innerHTML = `<details class="archive" ${endMode || wasOpen ? 'open' : ''} style="${endMode ? 'margin-top:28px' : ''}"><summary>
@@ -453,8 +507,23 @@
     }
 
     document.addEventListener('click', e => {
+        const h = e.target.closest('[data-hide]');
+        if (h) { hiddenKeys.add(h.dataset.hide); saveHidden(); render(); return; }
+        const u = e.target.closest('[data-unhide]');
+        if (u) {
+            hiddenKeys.delete(u.dataset.unhide); saveHidden();
+            if (!allTickets.some(isHidden)) showHidden = false;
+            render(); return;
+        }
         const j = e.target.closest('[data-jump]'); if (j) { jumpTo(j.dataset.jump); return; }
         const f = e.target.closest('[data-filter]'); if (f) { currentFilter = f.dataset.filter; render(); }
+    });
+
+    document.getElementById('hidden-toggle').addEventListener('click', () => { showHidden = !showHidden; render(); });
+    document.getElementById('hidebar-close').addEventListener('click', () => { showHidden = false; render(); });
+    document.getElementById('unhide-all').addEventListener('click', () => {
+        if (!confirm('Unhide all tickets on this computer?')) return;
+        hiddenKeys.clear(); saveHidden(); showHidden = false; render();
     });
 
     render();        // 先画出“加载中”的样子
