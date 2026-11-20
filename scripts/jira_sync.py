@@ -81,7 +81,8 @@ def sync_emulsion_tickets():
                 "po_link": fields.get("customfield_10245", ""), 
                 "do_link": fields.get("customfield_10235", ""),
                 "invoice_link": fields.get("customfield_10236", ""),
-                "bc_bl_link": fields.get("customfield_10242", ""),
+                "bc_link": fields.get("customfield_10242", ""),
+                "bl_link": fields.get("customfield_10243", ""),
                 "latest_comment": latest_comment,
                 "updated_at": fields.get("updated")
             }
