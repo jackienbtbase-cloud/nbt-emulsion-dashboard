@@ -18,7 +18,8 @@ async function loadTickets() {
                 ${t.po_link ? `<a href="${t.po_link}" target="_blank">📄 PO Link</a>` : ''}
                 ${t.do_link ? `<a href="${t.do_link}" target="_blank">📄 DO Link</a>` : ''}
                 ${t.invoice_link ? `<a href="${t.invoice_link}" target="_blank">📄 Invoice</a>` : ''}
-                ${t.bc_bl_link ? `<a href="${t.bc_bl_link}" target="_blank">🚢 Vessel BC/BL</a>` : ''}
+                ${t.bc_link ? `<a href="${t.bc_link}" target="_blank">🚢 Vessel BC</a>` : ''}
+                ${t.bl_link ? `<a href="${t.bl_link}" target="_blank">🚢 Vessel BL</a>` : ''}
             </div>
             <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; font-size: 13px;">
                 <strong>Latest Update:</strong><br>
